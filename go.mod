@@ -1,4 +1,4 @@
-module github.com/essentialkaos/go-jira/v3
+module github.com/tess1o/go-jira
 
 go 1.18
 
