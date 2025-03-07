@@ -604,12 +604,11 @@ type ProjectCategory struct {
 
 // SearchParams is params for fetching search results
 type SearchParams struct {
-	Fields                 []string `query:"fields"`
-	Expand                 []string `query:"expand"`
-	JQL                    string   `query:"jql"`
-	StartAt                int      `query:"startAt"`
-	MaxResults             int      `query:"maxResults"`
-	DisableQueryValidation bool     `query:"validateQuery,reverse"`
+	Fields     []string `query:"fields" json:"fields"`
+	Expand     []string `query:"expand" json:"expand"`
+	JQL        string   `query:"jql" json:"jql"`
+	StartAt    int      `query:"startAt" json:"startAt"`
+	MaxResults int      `query:"maxResults" json:"maxResults"`
 }
 
 // SearchResults contains search result

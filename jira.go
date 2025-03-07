@@ -11,10 +11,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/valyala/fasthttp"
 	"runtime"
 	"time"
-
-	"github.com/valyala/fasthttp"
 )
 
 // ////////////////////////////////////////////////////////////////////////////////// //
@@ -1770,6 +1769,32 @@ func (api *API) Search(params SearchParams) (*SearchResults, error) {
 	}
 }
 
+// SearchWithPost searches for issues using JQL using POST request.
+// This helps to avoid max length of query param in case of GET method usage.
+// https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e1528
+func (api *API) SearchWithPost(params SearchParams) (*SearchResults, error) {
+	result := &SearchResults{}
+	statusCode, err := api.doRequest(
+		"POST", "/rest/api/2/search",
+		nil, result, params, true,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	switch statusCode {
+	case 200:
+		return result, nil
+	case 400:
+		return result, ErrInvalidInput
+	case 401:
+		return result, ErrNoAuth
+	default:
+		return nil, makeUnknownError(statusCode)
+	}
+}
+
 // SearchUsers returns a list of users that match the search string
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e1990
 func (api *API) SearchUsers(params UserSearchParams) ([]*User, error) {
@@ -2274,19 +2299,19 @@ func (api *API) doRequest(method, uri string, params Parameters, result, body in
 // acquireRequest acquire new request with given params
 func (api *API) acquireRequest(method, uri string, params Parameters) *fasthttp.Request {
 	req := fasthttp.AcquireRequest()
-	query := params.ToQuery()
 
 	req.SetRequestURI(api.url + uri)
 
 	// Set query if params can be encoded as query
-	if query != "" {
-		req.URI().SetQueryString(query)
+	if params != nil {
+		query := params.ToQuery()
+		if query != "" {
+			req.URI().SetQueryString(query)
+		}
 	}
 
-	if method != "GET" {
-		req.Header.SetContentType("application/json")
-		req.Header.SetMethod(method)
-	}
+	req.Header.SetContentType("application/json")
+	req.Header.SetMethod(method)
 
 	// Set authorization header
 	if api.auth != "" {
