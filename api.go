@@ -21,55 +21,55 @@ import (
 
 // User permissions
 const (
-	PERMISSION_ADMINISTER                        = "ADMINISTER"
-	PERMISSION_ASSIGN_ISSUE                      = "ASSIGN_ISSUE"
-	PERMISSION_ASSIGNABLE_USER                   = "ASSIGNABLE_USER"
-	PERMISSION_ATTACHMENT_DELETE_ALL             = "ATTACHMENT_DELETE_ALL"
-	PERMISSION_ATTACHMENT_DELETE_OWN             = "ATTACHMENT_DELETE_OWN"
-	PERMISSION_BROWSE                            = "BROWSE"
-	PERMISSION_BULK_CHANGE                       = "BULK_CHANGE"
-	PERMISSION_CLOSE_ISSUE                       = "CLOSE_ISSUE"
-	PERMISSION_COMMENT_DELETE_ALL                = "COMMENT_DELETE_ALL"
-	PERMISSION_COMMENT_DELETE_OWN                = "COMMENT_DELETE_OWN"
-	PERMISSION_COMMENT_EDIT_ALL                  = "COMMENT_EDIT_ALL"
-	PERMISSION_COMMENT_EDIT_OWN                  = "COMMENT_EDIT_OWN"
-	PERMISSION_COMMENT_ISSUE                     = "COMMENT_ISSUE"
-	PERMISSION_CREATE_ATTACHMENT                 = "CREATE_ATTACHMENT"
-	PERMISSION_CREATE_ISSUE                      = "CREATE_ISSUE"
-	PERMISSION_CREATE_SHARED_OBJECTS             = "CREATE_SHARED_OBJECTS"
-	PERMISSION_DELETE_ISSUE                      = "DELETE_ISSUE"
-	PERMISSION_EDIT_ISSUE                        = "EDIT_ISSUE"
-	PERMISSION_LINK_ISSUE                        = "LINK_ISSUE"
-	PERMISSION_MANAGE_GROUP_FILTER_SUBSCRIPTIONS = "MANAGE_GROUP_FILTER_SUBSCRIPTIONS"
-	PERMISSION_MANAGE_WATCHER_LIST               = "MANAGE_WATCHER_LIST"
-	PERMISSION_MODIFY_REPORTER                   = "MODIFY_REPORTER"
-	PERMISSION_MOVE_ISSUE                        = "MOVE_ISSUE"
-	PERMISSION_PROJECT_ADMIN                     = "PROJECT_ADMIN"
-	PERMISSION_RESOLVE_ISSUE                     = "RESOLVE_ISSUE"
-	PERMISSION_SCHEDULE_ISSUE                    = "SCHEDULE_ISSUE"
-	PERMISSION_SET_ISSUE_SECURITY                = "SET_ISSUE_SECURITY"
-	PERMISSION_SYSTEM_ADMIN                      = "SYSTEM_ADMIN"
-	PERMISSION_USE                               = "USE"
-	PERMISSION_USER_PICKER                       = "USER_PICKER"
-	PERMISSION_VIEW_VERSION_CONTROL              = "VIEW_VERSION_CONTROL"
-	PERMISSION_VIEW_VOTERS_AND_WATCHERS          = "VIEW_VOTERS_AND_WATCHERS"
-	PERMISSION_VIEW_WORKFLOW_READONLY            = "VIEW_WORKFLOW_READONLY"
-	PERMISSION_WORK_ISSUE                        = "WORK_ISSUE"
-	PERMISSION_WORKLOG_DELETE_ALL                = "WORKLOG_DELETE_ALL"
-	PERMISSION_WORKLOG_DELETE_OWN                = "WORKLOG_DELETE_OWN"
-	PERMISSION_WORKLOG_EDIT_ALL                  = "WORKLOG_EDIT_ALL"
-	PERMISSION_WORKLOG_EDIT_OWN                  = "WORKLOG_EDIT_OWN"
+	PermissionAdminister                     = "ADMINISTER"
+	PermissionAssignIssue                    = "ASSIGN_ISSUE"
+	PermissionAssignableUser                 = "ASSIGNABLE_USER"
+	PermissionAttachmentDeleteAll            = "ATTACHMENT_DELETE_ALL"
+	PermissionAttachmentDeleteOwn            = "ATTACHMENT_DELETE_OWN"
+	PermissionBrowse                         = "BROWSE"
+	PermissionBulkChange                     = "BULK_CHANGE"
+	PermissionCloseIssue                     = "CLOSE_ISSUE"
+	PermissionCommentDeleteAll               = "COMMENT_DELETE_ALL"
+	PermissionCommentDeleteOwn               = "COMMENT_DELETE_OWN"
+	PermissionCommentEditAll                 = "COMMENT_EDIT_ALL"
+	PermissionCommentEditOwn                 = "COMMENT_EDIT_OWN"
+	PermissionCommentIssue                   = "COMMENT_ISSUE"
+	PermissionCreateAttachment               = "CREATE_ATTACHMENT"
+	PermissionCreateIssue                    = "CREATE_ISSUE"
+	PermissionCreateSharedObjects            = "CREATE_SHARED_OBJECTS"
+	PermissionDeleteIssue                    = "DELETE_ISSUE"
+	PermissionEditIssue                      = "EDIT_ISSUE"
+	PermissionLinkIssue                      = "LINK_ISSUE"
+	PermissionManageGroupFilterSubscriptions = "MANAGE_GROUP_FILTER_SUBSCRIPTIONS"
+	PermissionManageWatcherList              = "MANAGE_WATCHER_LIST"
+	PermissionModifyReporter                 = "MODIFY_REPORTER"
+	PermissionMoveIssue                      = "MOVE_ISSUE"
+	PermissionProjectAdmin                   = "PROJECT_ADMIN"
+	PermissionResolveIssue                   = "RESOLVE_ISSUE"
+	PermissionScheduleIssue                  = "SCHEDULE_ISSUE"
+	PermissionSetIssueSecurity               = "SET_ISSUE_SECURITY"
+	PermissionSystemAdmin                    = "SYSTEM_ADMIN"
+	PermissionUse                            = "USE"
+	PermissionUserPicker                     = "USER_PICKER"
+	PermissionViewVersionControl             = "VIEW_VERSION_CONTROL"
+	PermissionViewVotersAndWatchers          = "VIEW_VOTERS_AND_WATCHERS"
+	PermissionViewWorkflowReadonly           = "VIEW_WORKFLOW_READONLY"
+	PermissionWorkIssue                      = "WORK_ISSUE"
+	PermissionWorklogDeleteAll               = "WORKLOG_DELETE_ALL"
+	PermissionWorklogDeleteOwn               = "WORKLOG_DELETE_OWN"
+	PermissionWorklogEditAll                 = "WORKLOG_EDIT_ALL"
+	PermissionWorklogEditOwn                 = "WORKLOG_EDIT_OWN"
 )
 
 // Roles actors
 const (
-	ROLE_ACTOR_USER  = "atlassian-user-role-actor"
-	ROLE_ACTOR_GROUP = "atlassian-group-role-actor"
+	RoleActorUser  = "atlassian-user-role-actor"
+	RoleActorGroup = "atlassian-group-role-actor"
 )
 
 // ////////////////////////////////////////////////////////////////////////////////// //
 
-// Parameters is interface for params structs
+// Parameters is an interface for params structs
 type Parameters interface {
 	ToQuery() string
 }
@@ -975,7 +975,7 @@ func (d *Date) UnmarshalJSON(b []byte) error {
 	}
 
 	if err != nil {
-		return fmt.Errorf("Cannot unmarshal Date value: %v", err)
+		return fmt.Errorf("cannot unmarshal Date value: %v", err)
 	}
 
 	return nil

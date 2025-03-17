@@ -19,9 +19,9 @@ import (
 
 // Supported options
 const (
-	_OPTION_UNWRAP  = "unwrap"
-	_OPTION_RESPECT = "respect"
-	_OPTION_REVERSE = "reverse"
+	optionUnwrap  = "unwrap"
+	optionRespect = "respect"
+	optionReverse = "reverse"
 )
 
 // ////////////////////////////////////////////////////////////////////////////////// //
@@ -42,25 +42,25 @@ func paramsToQuery(params interface{}) string {
 		case "string":
 			if value.String() != "" {
 				result += tag + "=" + esc(value.String()) + "&"
-			} else if hasTagOption(tag, _OPTION_RESPECT) {
+			} else if hasTagOption(tag, optionRespect) {
 				result += getTagName(tag) + "=&"
 			}
 
 		case "int":
 			if value.Int() != 0 {
 				result += tag + "=" + fmt.Sprintf("%d", value.Int()) + "&"
-			} else if hasTagOption(tag, _OPTION_RESPECT) {
+			} else if hasTagOption(tag, optionRespect) {
 				result += getTagName(tag) + "=0&"
 			}
 
 		case "bool":
 			b := value.Bool()
-			if hasTagOption(tag, _OPTION_REVERSE) && b {
+			if hasTagOption(tag, optionReverse) && b {
 				result += getTagName(tag) + "=false&"
 			} else {
 				if b {
 					result += getTagName(tag) + "=true&"
-				} else if hasTagOption(tag, _OPTION_RESPECT) {
+				} else if hasTagOption(tag, optionRespect) {
 					result += getTagName(tag) + "=false&"
 				}
 			}
@@ -90,7 +90,7 @@ func formatSlice(tag string, s reflect.Value) string {
 	var result string
 
 	name := getTagName(tag)
-	unwrap := hasTagOption(tag, _OPTION_UNWRAP)
+	unwrap := hasTagOption(tag, optionUnwrap)
 
 	if !unwrap {
 		result += name + "="

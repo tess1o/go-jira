@@ -36,10 +36,10 @@ type AuthToken struct {
 // ////////////////////////////////////////////////////////////////////////////////// //
 
 var (
-	ErrEmptyUser        = errors.New("User can't be empty")
-	ErrEmptyPassword    = errors.New("Password can't be empty")
-	ErrEmptyToken       = errors.New("Token can't be empty")
-	ErrTokenWrongLength = errors.New("Token length must be equal to 44")
+	ErrEmptyUser        = errors.New("user can't be empty")
+	ErrEmptyPassword    = errors.New("password can't be empty")
+	ErrEmptyToken       = errors.New("token can't be empty")
+	ErrTokenWrongLength = errors.New("token length must be equal to 44")
 )
 
 // ////////////////////////////////////////////////////////////////////////////////// //

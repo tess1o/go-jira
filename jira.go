@@ -8,10 +8,13 @@ package jira
 // ////////////////////////////////////////////////////////////////////////////////// //
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/valyala/fasthttp"
+	"io"
+	"net/http"
 	"runtime"
 	"time"
 )
@@ -20,7 +23,7 @@ import (
 
 // API is Jira API struct
 type API struct {
-	Client *fasthttp.Client // Client is client for http requests
+	Client *http.Client // Client is client for http requests
 
 	url  string // Jira URL
 	auth string // Auth data
@@ -31,18 +34,18 @@ type API struct {
 // API errors
 var (
 	ErrEmptyURL     = errors.New("URL can't be empty")
-	ErrNoPerms      = errors.New("User does not have permission to use Jira")
-	ErrInvalidInput = errors.New("Input is invalid")
+	ErrNoPerms      = errors.New("user does not have permission to use Jira")
+	ErrInvalidInput = errors.New("input is invalid")
 	ErrWrongLinkID  = errors.New("LinkId is not a valid number, or the remote issue link with the given id does not belong to the given issue")
-	ErrNoAuth       = errors.New("Calling user is not authenticated")
-	ErrNoContent    = errors.New("There is no content with the given ID, or the calling user does not have permission to view the content")
-	ErrGenResponse  = errors.New("Error occurs while generating the response")
+	ErrNoAuth       = errors.New("calling user is not authenticated")
+	ErrNoContent    = errors.New("there is no content with the given ID, or the calling user does not have permission to view the content")
+	ErrGenResponse  = errors.New("error occurs while generating the response")
 )
 
 // ////////////////////////////////////////////////////////////////////////////////// //
 
 // NewAPI create new API struct
-func NewAPI(url string, auth Auth) (*API, error) {
+func NewAPI(url string, auth Auth, client *http.Client) (*API, error) {
 	if url == "" {
 		return nil, ErrEmptyURL
 	}
@@ -53,23 +56,19 @@ func NewAPI(url string, auth Auth) (*API, error) {
 		return nil, err
 	}
 
+	httpClient := client
+
+	if httpClient == nil {
+		httpClient = &http.Client{
+			Timeout: 10 * time.Second,
+		}
+	}
+
 	return &API{
-		Client: &fasthttp.Client{
-			Name:                getUserAgent("", ""),
-			MaxIdleConnDuration: 5 * time.Second,
-			ReadTimeout:         5 * time.Second,
-			WriteTimeout:        10 * time.Second,
-			MaxConnsPerHost:     150,
-		},
-
-		url:  url,
-		auth: auth.Encode(),
+		Client: httpClient,
+		url:    url,
+		auth:   auth.Encode(),
 	}, nil
-}
-
-// SetUserAgent set user-agent string based on app name and version
-func (api *API) SetUserAgent(app, version string) {
-	api.Client.Name = getUserAgent(app, version)
 }
 
 // ////////////////////////////////////////////////////////////////////////////////// //
@@ -134,7 +133,7 @@ func (api *API) GetServerInfo(doHealthCheck bool) (*ServerInfo, error) {
 // will be required.
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e3809
 func (api *API) GetColumns() ([]*Column, error) {
-	result := []*Column{}
+	var result []*Column
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/settings/columns",
 		EmptyParameters{}, &result, nil, false,
@@ -209,7 +208,7 @@ func (api *API) GetDashboard(dashboardID string) (*Dashboard, error) {
 // GetFields returns a list of all fields, both System and Custom
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e5959
 func (api *API) GetFields() ([]*Field, error) {
-	result := []*Field{}
+	var result []*Field
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/field",
 		EmptyParameters{}, &result, nil, false,
@@ -284,7 +283,7 @@ func (api *API) GetFilterDefaultScope() (string, error) {
 // GetFilterFavourites returns the favourite filters of the logged-in user
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e2597
 func (api *API) GetFilterFavourites(params ExpandParameters) ([]*Filter, error) {
-	result := []*Filter{}
+	var result []*Filter
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/filter/favourite",
 		params, &result, nil, false,
@@ -379,7 +378,7 @@ func (api *API) GetIssueComment(issueIDOrKey, commentID string, params ExpandPar
 	}
 }
 
-// GetIssueMeta returns the meta data for editing an issue
+// GetIssueMeta returns the metadata for editing an issue
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e4364
 func (api *API) GetIssueMeta(issueIDOrKey string) (*IssueMeta, error) {
 	result := &IssueMeta{}
@@ -407,7 +406,7 @@ func (api *API) GetIssueMeta(issueIDOrKey string) (*IssueMeta, error) {
 // GetIssueRemoteLinks returns sub-resource representing the remote issue links on the issue
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e4385
 func (api *API) GetIssueRemoteLinks(issueIDOrKey string, params RemoteLinkParams) ([]*RemoteLink, error) {
-	result := []*RemoteLink{}
+	var result []*RemoteLink
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/issue/"+issueIDOrKey+"/remotelink",
 		params, &result, nil, true,
@@ -589,9 +588,9 @@ func (api *API) GetIssueWorklog(issueIDOrKey, worklogID string) (*Worklog, error
 	}
 }
 
-// GetCreateMeta returns the meta data for creating issues. This includes
+// GetCreateMeta returns the metadata for creating issues. This includes
 // the available projects, issue types and fields, including field types
-// and whether or not those fields are required. Projects will not be returned
+// and whether those fields are required. Projects will not be returned
 // if the user does not have permission to create issues in that project.
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e4330
 func (api *API) GetCreateMeta(params CreateMetaParams) ([]*Project, error) {
@@ -766,7 +765,7 @@ func (api *API) GetIssueLinkType(linkTypeID string) (*LinkType, error) {
 // GetIssueTypes returns a list of all issue types visible to the user
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e5567
 func (api *API) GetIssueTypes() ([]*IssueType, error) {
-	result := []*IssueType{}
+	var result []*IssueType
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/issuetype",
 		EmptyParameters{}, &result, nil, false,
@@ -818,7 +817,7 @@ func (api *API) GetIssueType(issueTypeID string) (*IssueType, error) {
 // and the same screen scheme.
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e5754
 func (api *API) GetIssueTypeAlternatives(issueTypeID string) ([]*IssueType, error) {
-	result := []*IssueType{}
+	var result []*IssueType
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/issuetype/"+issueTypeID+"/alternatives",
 		EmptyParameters{}, &result, nil, true,
@@ -893,7 +892,7 @@ func (api *API) GetAutocompleteSuggestions(params SuggestionParams) ([]Suggestio
 }
 
 // GetMyPermissions returns all permissions in the system and whether the currently
-// logged in user has them. You can optionally provide a specific context to get
+// logged-in user has them. You can optionally provide a specific context to get
 // permissions for (projectKey OR projectId OR issueKey OR issueId)
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e5925
 func (api *API) GetMyPermissions(params PermissionsParams) (map[string]*Permission, error) {
@@ -953,7 +952,7 @@ func (api *API) GetMyself() (*User, error) {
 // GetPriorities returns a list of all issue priorities
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e2804
 func (api *API) GetPriorities() ([]*Priority, error) {
-	result := []*Priority{}
+	var result []*Priority
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/priority",
 		EmptyParameters{}, &result, nil, false,
@@ -999,11 +998,11 @@ func (api *API) GetPriority(priorityID string) (*Priority, error) {
 }
 
 // GetProjects returns all projects which are visible for the currently
-// logged in user. If no user is logged in, it returns the list of projects
+// logged-in user. If no user is logged in, it returns the list of projects
 // that are visible when using anonymous access.
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e3484
 func (api *API) GetProjects(params ExpandParameters) ([]*Project, error) {
-	result := []*Project{}
+	var result []*Project
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/project",
 		params, &result, nil, false,
@@ -1050,8 +1049,8 @@ func (api *API) GetProject(projectIDOrKey string, params ExpandParameters) (*Pro
 	}
 }
 
-// GetProjectAvatars returns all avatars which are visible for the currently logged
-// in user. The avatars are grouped into system and custom.
+// GetProjectAvatars returns all avatars which are visible for the currently logged-in user.
+// The avatars are grouped into system and custom.
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e3555
 func (api *API) GetProjectAvatars(projectIDOrKey string) (*Avatars, error) {
 	result := &Avatars{}
@@ -1078,11 +1077,11 @@ func (api *API) GetProjectAvatars(projectIDOrKey string) (*Avatars, error) {
 	}
 }
 
-// GetProjectComponents returns a full representation of a the specified
+// GetProjectComponents returns a full representation of the specified
 // project's components
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e3757
 func (api *API) GetProjectComponents(projectIDOrKey string) ([]*Component, error) {
-	result := []*Component{}
+	var result []*Component
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/project/"+projectIDOrKey+"/components",
 		EmptyParameters{}, &result, nil, true,
@@ -1107,7 +1106,7 @@ func (api *API) GetProjectComponents(projectIDOrKey string) ([]*Component, error
 // GetProjectStatuses returns all issue types with valid status values for a project
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e3534
 func (api *API) GetProjectStatuses(projectIDOrKey string) ([]*IssueType, error) {
-	result := []*IssueType{}
+	var result []*IssueType
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/project/"+projectIDOrKey+"/statuses",
 		EmptyParameters{}, &result, nil, true,
@@ -1132,7 +1131,7 @@ func (api *API) GetProjectStatuses(projectIDOrKey string) ([]*IssueType, error) 
 // GetProjectVersions returns the keys of all properties for the project identified
 // by the key or by the id
 func (api *API) GetProjectVersions(projectIDOrKey string, params ExpandParameters) ([]*Version, error) {
-	result := []*Version{}
+	var result []*Version
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/project/"+projectIDOrKey+"/versions",
 		params, &result, nil, true,
@@ -1259,7 +1258,7 @@ func (api *API) GetProjectRole(projectIDOrKey, roleID string) (*Role, error) {
 // GetProjectCategories returns all project categories
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e1411
 func (api *API) GetProjectCategories() ([]*ProjectCategory, error) {
-	result := []*ProjectCategory{}
+	var result []*ProjectCategory
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/projectCategory",
 		EmptyParameters{}, &result, nil, false,
@@ -1332,7 +1331,7 @@ func (api *API) ValidateProjectKey(projectKey string) error {
 // GetResolutions returns a list of all resolutions
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e842
 func (api *API) GetResolutions() ([]*Resolution, error) {
-	result := []*Resolution{}
+	var result []*Resolution
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/resolution",
 		EmptyParameters{}, &result, nil, false,
@@ -1377,11 +1376,10 @@ func (api *API) GetResolution(resolutionID string) (*Resolution, error) {
 	}
 }
 
-// GetRoles returns all the ProjectRoles available in JIRA. Currently this list
-// is global.
+// GetRoles returns all the ProjectRoles available in JIRA. Currently, this list is global.
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e2767
 func (api *API) GetRoles() ([]*Role, error) {
-	result := []*Role{}
+	var result []*Role
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/role",
 		EmptyParameters{}, &result, nil, false,
@@ -1427,7 +1425,7 @@ func (api *API) GetRole(roleID string) (*Role, error) {
 // GetStatuses returns a list of all statuses
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e53
 func (api *API) GetStatuses() ([]*Status, error) {
-	result := []*Status{}
+	var result []*Status
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/status",
 		EmptyParameters{}, &result, nil, false,
@@ -1477,7 +1475,7 @@ func (api *API) GetStatus(statusIDOrName string) (*Status, error) {
 // GetStatusCategories returns a list of all status categories
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e5772
 func (api *API) GetStatusCategories() ([]*StatusCategory, error) {
-	result := []*StatusCategory{}
+	var result []*StatusCategory
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/statuscategory",
 		EmptyParameters{}, &result, nil, false,
@@ -1584,7 +1582,7 @@ func (api *API) GetUser(params UserParams) (*User, error) {
 	}
 }
 
-// GetUserAvatars returns all avatars which are visible for the currently logged in user
+// GetUserAvatars returns all avatars which are visible for the currently logged-in user
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e2248
 func (api *API) GetUserAvatars(username string) (*Avatars, error) {
 	result := &Avatars{}
@@ -1612,10 +1610,10 @@ func (api *API) GetUserAvatars(username string) (*Avatars, error) {
 }
 
 // GetUserColumns returns the default columns for the given user. Admin permission
-// will be required to get columns for a user other than the currently logged in user.
+// will be required to get columns for a user other than the currently logged-in user.
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e2400
 func (api *API) GetUserColumns(username string) ([]*Column, error) {
-	result := []*Column{}
+	var result []*Column
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/user/columns?username="+username,
 		EmptyParameters{}, &result, nil, true,
@@ -1644,7 +1642,7 @@ func (api *API) GetUserColumns(username string) ([]*Column, error) {
 // accessed by users with ADMINISTER_PROJECT permission for the project or global
 // ADMIN or SYSADMIN rights.
 func (api *API) GetUsersByPermissions(params UserPermissionParams) ([]*User, error) {
-	result := []*User{}
+	var result []*User
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/user/permission/search",
 		params, &result, nil, true,
@@ -1772,11 +1770,10 @@ func (api *API) Search(params SearchParams) (*SearchResults, error) {
 // SearchWithPost searches for issues using JQL using POST request.
 // This helps to avoid max length of query param in case of GET method usage.
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e1528
-func (api *API) SearchWithPost(params SearchParams) (*SearchResults, error) {
+func (api *API) SearchWithPost(ctx context.Context, params SearchParams) (*SearchResults, error) {
 	result := &SearchResults{}
-	statusCode, err := api.doRequest(
-		"POST", "/rest/api/2/search",
-		nil, result, params, true,
+	statusCode, err := api.doRequestWithContext(ctx, "POST", "/rest/api/2/search",
+		EmptyParameters{}, result, params, true,
 	)
 
 	if err != nil {
@@ -1798,7 +1795,7 @@ func (api *API) SearchWithPost(params SearchParams) (*SearchResults, error) {
 // SearchUsers returns a list of users that match the search string
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e1990
 func (api *API) SearchUsers(params UserSearchParams) ([]*User, error) {
-	result := []*User{}
+	var result []*User
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/user/search",
 		params, &result, nil, true,
@@ -1850,7 +1847,7 @@ func (api *API) GetSecurityLevel(levelID string) (*SecurityLevel, error) {
 // already been added
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e3189
 func (api *API) GetScreenFields(screenID string) ([]*ScreenField, error) {
-	result := []*ScreenField{}
+	var result []*ScreenField
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/screens/"+screenID+"/availableFields",
 		EmptyParameters{}, &result, nil, false,
@@ -1875,7 +1872,7 @@ func (api *API) GetScreenFields(screenID string) ([]*ScreenField, error) {
 // GetScreenTabs returns a list of all tabs for the given screen
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e3036
 func (api *API) GetScreenTabs(screenID string, params ScreenParams) ([]*ScreenTab, error) {
-	result := []*ScreenTab{}
+	var result []*ScreenTab
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/screens/"+screenID+"/tabs",
 		params, &result, nil, false,
@@ -1900,7 +1897,7 @@ func (api *API) GetScreenTabs(screenID string, params ScreenParams) ([]*ScreenTa
 // GetScreenTabFields returns all fields for a given tab
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e3103
 func (api *API) GetScreenTabFields(screenID, tabID string, params ScreenParams) ([]*ScreenField, error) {
-	result := []*ScreenField{}
+	var result []*ScreenField
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/screens/"+screenID+"/tabs/"+tabID+"/fields",
 		params, &result, nil, false,
@@ -2006,7 +2003,7 @@ func (api *API) GetVersionUnresolvedCount(versionID string) (int, error) {
 // GetWorkflows returns all workflows
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e1208
 func (api *API) GetWorkflows() ([]*Workflow, error) {
-	result := []*Workflow{}
+	var result []*Workflow
 	statusCode, err := api.doRequest(
 		"GET", "/rest/api/2/workflow",
 		EmptyParameters{}, &result, nil, false,
@@ -2117,7 +2114,7 @@ func (api *API) GetWorkflowSchemeDefault(schemeID string, returnDraftIfExists bo
 // for the passed scheme
 // https://docs.atlassian.com/software/jira/docs/api/REST/6.4.13/#d2e423
 func (api *API) GetWorkflowSchemeWorkflows(schemeID string, returnDraftIfExists bool) ([]*WorkflowInfo, error) {
-	result := []*WorkflowInfo{}
+	var result []*WorkflowInfo
 	url := "/rest/api/2/workflowscheme/" + schemeID + "/workflow"
 
 	if returnDraftIfExists {
@@ -2200,6 +2197,7 @@ func (api *API) setEntityProperty(url string, prop *Property) error {
 }
 
 // getEntityProperty returns entity (issue/project) property
+// todo: fix this, propKey is not used
 func (api *API) getEntityProperty(url, propKey string) (*Property, error) {
 	result := &struct {
 		Value *Property `json:"value"`
@@ -2228,6 +2226,7 @@ func (api *API) getEntityProperty(url, propKey string) (*Property, error) {
 }
 
 // deleteEntityProperty deletes entity (issue/project) property
+// todo: fix this, propKey is not used
 func (api *API) deleteEntityProperty(url, propKey string) error {
 	statusCode, err := api.doRequest("DELETE", url, EmptyParameters{}, nil, nil, false)
 
@@ -2257,68 +2256,78 @@ func (api *API) deleteEntityProperty(url, propKey string) error {
 
 // doRequest create and execute request
 func (api *API) doRequest(method, uri string, params Parameters, result, body interface{}, decodeError bool) (int, error) {
-	req := api.acquireRequest(method, uri, params)
-	resp := fasthttp.AcquireResponse()
+	return api.doRequestWithContext(context.Background(), method, uri, params, result, body, decodeError)
+}
 
-	defer fasthttp.ReleaseRequest(req)
-	defer fasthttp.ReleaseResponse(resp)
-
-	if body != nil {
-		bodyData, err := json.Marshal(body)
-
-		if err != nil {
-			return -1, err
-		}
-
-		req.SetBody(bodyData)
+func (api *API) doRequestWithContext(ctx context.Context, method, uri string, params Parameters, result, body interface{}, decodeError bool) (int, error) {
+	req, err := api.prepareRequest(ctx, method, uri, params, body)
+	if err != nil {
+		return 0, err
 	}
 
-	err := api.Client.Do(req, resp)
+	resp, err := api.Client.Do(req)
 
 	if err != nil {
 		return -1, err
 	}
 
-	statusCode := resp.StatusCode()
+	statusCode := resp.StatusCode
+
+	defer resp.Body.Close()
 
 	if statusCode != 200 && decodeError {
-		return statusCode, decodeInternalError(resp.Body())
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return statusCode, err
+		}
+		return statusCode, decodeInternalError(respBody)
 	}
 
 	if result == nil {
 		return statusCode, nil
 	}
 
-	err = json.Unmarshal(resp.Body(), result)
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return statusCode, err
+	}
+
+	err = json.Unmarshal(respBody, result)
 
 	return statusCode, err
 }
 
 // codebeat:enable[ARITY]
-
-// acquireRequest acquire new request with given params
-func (api *API) acquireRequest(method, uri string, params Parameters) *fasthttp.Request {
-	req := fasthttp.AcquireRequest()
-
-	req.SetRequestURI(api.url + uri)
-
-	// Set query if params can be encoded as query
-	if params != nil {
-		query := params.ToQuery()
-		if query != "" {
-			req.URI().SetQueryString(query)
+// prepareRequest acquire new request with given params
+func (api *API) prepareRequest(ctx context.Context, method, uri string, params Parameters, body any) (*http.Request, error) {
+	var bodyData []byte
+	if body != nil {
+		var err error
+		bodyData, err = json.Marshal(body)
+		if err != nil {
+			return nil, err
 		}
 	}
+	req, err := http.NewRequestWithContext(ctx, method, api.url+uri, bytes.NewBuffer(bodyData))
+	if err != nil {
+		return nil, err
+	}
 
-	req.Header.SetContentType("application/json")
-	req.Header.SetMethod(method)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", getUserAgent("", ""))
+
+	// Set query if params can be encoded as query
+	query := params.ToQuery()
+	if query != "" {
+		req.URL.RawQuery = query
+	}
 
 	// Set authorization header
 	if api.auth != "" {
 		req.Header.Add("Authorization", api.auth)
 	}
-
-	return req
+	return req, nil
 }
 
 // ////////////////////////////////////////////////////////////////////////////////// //
@@ -2354,5 +2363,5 @@ func getUserAgent(app, version string) string {
 
 // makeUnknownError create error struct for unknown error
 func makeUnknownError(statusCode int) error {
-	return fmt.Errorf("Unknown error occurred (status code %d)", statusCode)
+	return fmt.Errorf("unknown error occurred (status code %d)", statusCode)
 }
